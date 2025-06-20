@@ -1,0 +1,20 @@
+{
+  "name": "dify_assistant",
+  "version": "1.0.0",
+  "main": "dify_dsl_demo.js",
+  "scripts": {
+    "export": "node cli.js export",
+    "update": "node cli.js update",
+    "export:test": "node cli.js export --config config.test.json",
+    "update:test": "node cli.js update --config config.test.json",
+    "test": "node test.js",
+    "test:chat": "node test.js chat"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "js-yaml": "^4.1.0"
+  }
+}
