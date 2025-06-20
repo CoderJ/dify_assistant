@@ -34,13 +34,13 @@
 
 ## 常用命令
 
-### 1. 导出并拆分 llm 节点
+### 1. 初始化本地开发环境（prepare，原export）
 ```bash
-npm run export
+npm run prepare
 # 或
 node cli.js export
 ```
-- 自动导出 DSL/main.yml、拆分 prompts/、生成 test/inputs.json
+- 自动导出 DSL/main.yml、拆分 prompts/、生成 test/inputs/1/ 下的变量txt模板
 
 ### 2. 合并 llm 节点并导入发布
 ```bash
@@ -64,8 +64,8 @@ npm run test:chat
 
 ### 5. 多环境支持
 ```bash
-npm run export -- --config config.test.json
-npm run update -- --config config.test.json
+npm run prepare:test
+npm run update:test
 npm run test -- --config config.test.json
 npm run test:chat -- --config config.test.json
 ```

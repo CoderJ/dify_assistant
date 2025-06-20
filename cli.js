@@ -36,10 +36,12 @@ function safeFileName(name) {
   return name.replace(/[^\w\u4e00-\u9fa5-]+/g, '_');
 }
 function parsePromptMd(md) {
-  const blocks = md.split(/---\s*/).map(b => b.trim()).filter(Boolean);
+  // 支持多行内容，---分隔
+  const blocks = md.split(/---\s*\n?/).map(b => b.trim()).filter(Boolean);
   const prompts = [];
   for (const block of blocks) {
-    const match = block.match(/^\*\*(.+)\*\*:\s*([\s\S]*)$/);
+    // 支持**role**:（冒号后可有空格），内容可多行
+    const match = block.match(/^\*\*(.+?)\*\*:\s*\n?([\s\S]*)$/);
     if (match) {
       prompts.push({ role: match[1].trim(), text: match[2].trim() });
     }
@@ -116,24 +118,32 @@ async function exportAndSplit() {
     }
     fs.writeFileSync(inputsPath, JSON.stringify(inputs, null, 2), 'utf-8');
     console.log('已生成 test/inputs.json:', inputs);
+    // 自动生成inputs/1/变量txt模板
+    const inputsDir = path.join(testDir, 'inputs', '1');
+    if (!fs.existsSync(inputsDir)) fs.mkdirSync(inputsDir, { recursive: true });
+    for (const v of variables) {
+      const varFile = path.join(inputsDir, `${v.variable}.txt`);
+      if (!fs.existsSync(varFile)) fs.writeFileSync(varFile, '');
+    }
+    console.log('已生成 test/inputs/1/ 下的变量txt模板，可直接粘贴大段文本。');
     // 拆分llm节点
     let llmCount = 0;
     for (const node of nodes) {
       if (node?.data?.type === 'llm') {
         const title = node.data.title || `llm_${node.id}`;
         const safeTitle = safeFileName(title);
-        // prompt_template -> markdown
+        // prompt_template -> 多txt文件
         const prompts = node.data.prompt_template || [];
-        let mdContent = `# ${title} Prompt\n\n`;
-        for (const p of prompts) {
-          mdContent += `**${p.role}**:\n\n${p.text}\n\n---\n`;
+        for (let i = 0; i < prompts.length; i++) {
+          const role = prompts[i].role;
+          const fileName = `${safeTitle}.${role}.txt`;
+          fs.writeFileSync(path.join(promptsDir, fileName), prompts[i].text, 'utf-8');
         }
-        fs.writeFileSync(path.join(promptsDir, `${safeTitle}.md`), mdContent, 'utf-8');
         // 其它参数 -> json
         const { prompt_template, ...rest } = node.data;
         fs.writeFileSync(path.join(promptsDir, `${safeTitle}.json`), JSON.stringify(rest, null, 2), 'utf-8');
         llmCount++;
-        console.log(`已导出: ${safeTitle}.md, ${safeTitle}.json`);
+        console.log(`已导出: ${safeTitle}.[role].txt, ${safeTitle}.json`);
       }
     }
     if (llmCount === 0) {
@@ -159,14 +169,25 @@ async function mergeAndUpdate() {
     if (node?.data?.type === 'llm') {
       const title = node.data.title || `llm_${node.id}`;
       const safeTitle = safeFileName(title);
-      const mdPath = path.join(promptsDir, `${safeTitle}.md`);
       const jsonPath = path.join(promptsDir, `${safeTitle}.json`);
-      if (!fs.existsSync(mdPath) || !fs.existsSync(jsonPath)) {
-        console.warn(`跳过 ${title}，因缺少 md 或 json 文件。`);
+      if (!fs.existsSync(jsonPath)) {
+        console.warn(`跳过 ${title}，因缺少 json 文件。`);
         continue;
       }
-      const mdContent = fs.readFileSync(mdPath, 'utf-8');
-      const prompt_template = parsePromptMd(mdContent);
+      // 读取所有 .role.txt 文件
+      const prompt_template = [];
+      const files = fs.readdirSync(promptsDir).filter(f => f.startsWith(`${safeTitle}.`) && f.endsWith('.txt'));
+      for (const file of files) {
+        const m = file.match(/^.+\.(.+)\.txt$/);
+        if (m) {
+          const role = m[1];
+          const text = fs.readFileSync(path.join(promptsDir, file), 'utf-8');
+          prompt_template.push({ role, text });
+        }
+      }
+      // 按常见顺序排序（system, user, assistant, ...）
+      const roleOrder = { system: 1, user: 2, assistant: 3 };
+      prompt_template.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
       const rest = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
       node.data = { ...rest, prompt_template };
       llmCount++;

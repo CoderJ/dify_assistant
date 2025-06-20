@@ -9,6 +9,8 @@ const args = process.argv.slice(2);
 const isChatMode = args[0] === 'chat';
 const configArgIdx = args.indexOf('--config');
 const configFile = configArgIdx !== -1 ? args[configArgIdx + 1] : 'config.json';
+const inputsArgIdx = args.indexOf('--inputs');
+const inputsSet = inputsArgIdx !== -1 ? args[inputsArgIdx + 1] : '1';
 
 // 读取配置
 let config;
@@ -21,13 +23,19 @@ try {
 const BASE_URL = config.TEST_BASE_URL;
 const API_KEY = config.TEST_API_KEY;
 
-// 读取全局inputs.json
-let globalInputs = {};
-try {
-  globalInputs = JSON.parse(fs.readFileSync(path.join(__dirname, 'test', 'inputs.json'), 'utf-8'));
-} catch (e) {
-  // 没有inputs.json则忽略
+// 读取全局inputs（txt文件版）
+function readInputsFromDir(dir) {
+  const inputs = {};
+  if (!fs.existsSync(dir)) return inputs;
+  for (const file of fs.readdirSync(dir)) {
+    if (file.endsWith('.txt')) {
+      const varName = file.replace(/\.txt$/, '');
+      inputs[varName] = fs.readFileSync(path.join(dir, file), 'utf-8');
+    }
+  }
+  return inputs;
 }
+const globalInputs = readInputsFromDir(path.join(__dirname, 'test', 'inputs', inputsSet));
 
 const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir);
