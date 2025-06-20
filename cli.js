@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const axios = require('axios');
+const { getDifyTokensFromChrome } = require('./sync-chrome-tokens');
 
 // 解析命令行参数
 const args = process.argv.slice(2);
@@ -29,7 +30,51 @@ try {
   console.error(`请先在项目根目录创建 ${configFile} 配置文件！`);
   process.exit(1);
 }
-const { DIFY_BASE_URL, API_TOKEN, APP_ID } = config;
+const { DIFY_BASE_URL, APP_ID } = config;
+
+const TOKEN_CACHE_FILE = path.join(__dirname, '.token_cache.json');
+let tokenCache = null;
+
+async function getToken() {
+  if (tokenCache) return tokenCache;
+  if (fs.existsSync(TOKEN_CACHE_FILE)) {
+    try {
+      tokenCache = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf-8'));
+      if (tokenCache && tokenCache.API_TOKEN) return tokenCache;
+    } catch (e) {}
+  }
+  tokenCache = await getDifyTokensFromChrome();
+  if (tokenCache && tokenCache.API_TOKEN) {
+    fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(tokenCache));
+    return tokenCache;
+  }
+  return null;
+}
+
+async function requestWithTokenRetry(axiosConfig) {
+  let tokens = await getToken();
+  if (!tokens || !tokens.API_TOKEN) {
+    console.error('未能获取到有效的 Dify token，请确保已登录 cloud.dify.ai 并在 config.json 配置了正确的 CHROME_LEVELDB_PATH！');
+    process.exit(1);
+  }
+  axiosConfig.headers = axiosConfig.headers || {};
+  axiosConfig.headers['Authorization'] = `Bearer ${tokens.API_TOKEN}`;
+  try {
+    return await axios(axiosConfig);
+  } catch (err) {
+    if (err.response && err.response.status === 401) {
+      // token 失效，重新 sync
+      const newTokens = await getDifyTokensFromChrome();
+      if (newTokens && newTokens.API_TOKEN) {
+        fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(newTokens));
+        tokenCache = newTokens;
+        axiosConfig.headers['Authorization'] = `Bearer ${newTokens.API_TOKEN}`;
+        return await axios(axiosConfig); // 重试
+      }
+    }
+    throw err;
+  }
+}
 
 // 工具函数
 function safeFileName(name) {
@@ -49,46 +94,11 @@ function parsePromptMd(md) {
   return prompts;
 }
 
-// 自动刷新token的请求封装
-async function requestWithAutoRefresh(config, configPath, axiosConfig) {
-  try {
-    axiosConfig.headers = axiosConfig.headers || {};
-    axiosConfig.headers['Authorization'] = `Bearer ${config.API_TOKEN}`;
-    return await axios(axiosConfig);
-  } catch (err) {
-    if (err.response && err.response.status === 401 && config.API_REFRESH_TOKEN) {
-      // token过期，自动刷新
-      try {
-        const res = await axios.post(
-          `${config.DIFY_BASE_URL}/console/api/refresh-token`,
-          { refresh_token: config.API_REFRESH_TOKEN },
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-        const { access_token, refresh_token } = res.data.data;
-        config.API_TOKEN = access_token;
-        config.API_REFRESH_TOKEN = refresh_token;
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-        axiosConfig.headers['Authorization'] = `Bearer ${access_token}`;
-        return await axios(axiosConfig); // 重试
-      } catch (refreshErr) {
-        console.error('刷新API_TOKEN失败，请手动在config.json中更新API_TOKEN和API_REFRESH_TOKEN！');
-        if (refreshErr.response) {
-          console.error('刷新失败详情:', JSON.stringify(refreshErr.response.data));
-        } else {
-          console.error('刷新失败详情:', refreshErr.message);
-        }
-        process.exit(1);
-      }
-    }
-    throw err;
-  }
-}
-
 // 1. 导出主DSL并拆分llm节点
 async function exportAndSplit() {
   // 导出主DSL
   try {
-    const res = await requestWithAutoRefresh(config, path.join(__dirname, configFile), {
+    const res = await requestWithTokenRetry({
       method: 'get',
       url: `${DIFY_BASE_URL}/console/api/apps/${APP_ID}/export?include_secret=false`
     });
@@ -199,7 +209,7 @@ async function mergeAndUpdate() {
   // 导入+发布
   try {
     const yamlContent = fs.readFileSync(dslPath, 'utf-8');
-    const res = await requestWithAutoRefresh(config, path.join(__dirname, configFile), {
+    const res = await requestWithTokenRetry({
       method: 'post',
       url: `${DIFY_BASE_URL}/console/api/apps/imports`,
       data: {
@@ -213,7 +223,7 @@ async function mergeAndUpdate() {
     });
     console.log('导入成功:', res.data);
     // 自动发布
-    const publishRes = await requestWithAutoRefresh(config, path.join(__dirname, configFile), {
+    const publishRes = await requestWithTokenRetry({
       method: 'post',
       url: `${DIFY_BASE_URL}/console/api/apps/${APP_ID}/workflows/publish`,
       data: { marked_name: '', marked_comment: '' },

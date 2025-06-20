@@ -18,9 +18,14 @@ yarn-error.log*
 *.log
 *.tmp
 
-# DSL导出缓存（如不希望纳入版本控制）
+tmp/
+test/
+config.json
+*.token_cache.json
+
+
+
+# 使用项目请删掉这里
 DSL/
 prompts/
 logs/
-test/
-config.json
