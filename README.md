@@ -1,91 +1,184 @@
-# dify_assistant
+# Dify Assistant
 
-一个用于高效管理、开发和测试 Dify 应用工作流的命令行工具，支持本地 DSL 文件的导入导出、llm节点拆分与合并、自动化测试等，适合团队协作和版本控制。
+一个用于高效管理、开发和测试多个 Dify 应用的工具，支持多应用管理、本地 DSL 文件的导入导出、llm节点拆分与合并、自动化测试等，适合团队协作和版本控制。
 
-## 主要功能
-- 一键导出 Dify 应用 DSL（main.yml），并自动拆分所有 llm 节点为 Markdown+JSON 文件，便于本地编辑和审阅
-- 自动分析必填变量，生成测试输入模板（test/inputs.json）
-- 支持本地编辑 llm 节点后自动合并回主 DSL 文件
-- 一键导入并自动发布到 Dify 应用
-- 支持批量自动化测试和命令行对话测试，便于 prompt/工作流回归验证
-- 多环境配置支持（如 config.json、config.test.json）
+## 🚀 主要功能
 
-## 目录结构
+### 多应用管理
+- **一键同步所有应用**：自动从 Dify 账号下载所有应用的 DSL 配置和 API Key
+- **独立应用管理**：每个应用都有独立的配置、DSL、测试文件等
+- **智能文件夹命名**：`应用名-Tag-APP_ID` 格式，避免重名冲突
+- **应用切换**：在多个应用间快速切换，进行开发、测试、调试
+
+### DSL 管理
+- **自动拆分**：将 llm 节点的 prompt_template 拆分为 Markdown 文件，便于编辑
+- **自动合并**：编辑完成后自动合并回主 DSL 文件
+- **一键发布**：自动导入并发布到 Dify 应用
+
+### 测试功能
+- **批量测试**：支持批量自动化测试，验证 prompt 和工作流
+- **交互式测试**：命令行对话测试，实时验证应用效果
+- **Workflow 测试**：专门针对 workflow 模式的测试
+- **网页调试**：提供 Web 界面进行应用调试
+
+## 📁 项目结构
+
 ```
-├── cli.js              # 主命令行入口，支持 export/update
-├── test.js             # 测试入口，支持批量和交互式测试
-├── config.json         # 主环境配置（API Token、AppId等）
-├── config.test.json    # 测试环境配置（可选）
-├── package.json        # npm 脚本与依赖
-├── DSL/
-│   └── main.yml        # Dify 应用主 DSL 文件
-├── prompts/
-│   ├── xxx.md          # 每个llm节点的prompt（Markdown）
-│   └── xxx.json        # 每个llm节点的参数（JSON）
-├── test/
-│   ├── testcases.json  # 批量测试用例
-│   └── inputs.json     # 必填变量输入模板
-└── ...
+dify_assistant/
+├── apps/                    # 多应用管理目录
+│   ├── README.md           # 应用管理说明
+│   ├── 应用名-Tag-ID/      # 每个应用的独立目录
+│   │   ├── config.json     # 应用配置（APP_ID, TEST_API_KEY）
+│   │   ├── DSL/
+│   │   │   └── main.yml    # 应用 DSL 文件
+│   │   ├── prompts/        # 拆分的 prompt 文件（.md格式）
+│   │   ├── test/           # 测试文件
+│   │   ├── logs/           # 日志文件
+│   │   └── tmp/            # 临时文件
+│   └── ...
+├── config.json             # 全局配置（DIFY_BASE_URL等）
+├── start.js                # 多应用管理器入口
+├── app-manager.js          # 应用管理核心逻辑
+├── cli.js                  # DSL 导入导出工具
+├── test.js                 # 测试工具
+├── debug-server.js         # 网页调试服务器
+└── package.json            # 项目配置
 ```
 
-## 配置方法
-1. 复制 `config.json`，填写你的 Dify 地址、API Token、AppId。
-2. 如需多环境，创建 `config.test.json` 并填写测试环境参数。
+## ⚙️ 配置方法
 
-## 常用命令
+### 1. 全局配置（config.json）
+```json
+{
+  "DIFY_BASE_URL": "https://cloud.dify.ai",
+  "CHROME_LEVELDB_PATH": "",
+  "TEST_BASE_URL" : "https://api.dify.ai",
+}
+```
 
-### 1. 初始化本地开发环境（prepare，原export）
+### 2. 应用配置（apps/应用名/config.json）
+```json
+{
+  "APP_ID": "your-app-id",
+  "TEST_API_KEY": "your-api-key"
+}
+```
+
+## 🎯 使用方法
+
+### 1. 首次使用
 ```bash
-npm run prepare
-# 或
-node cli.js export
+npm start
 ```
-- 自动导出 DSL/main.yml、拆分 prompts/、生成 test/inputs/1/ 下的变量txt模板
+选择"🔄 同步所有应用"，系统会自动：
+- 下载所有应用的 DSL 配置
+- 获取每个应用的 API Key
+- 创建完整的应用结构
+- 拆分 LLM 节点为 .md 文件
+- 生成测试模板
 
-### 2. 合并 llm 节点并导入发布
+### 2. 日常使用
+```bash
+npm start
+```
+- 选择要操作的应用
+- 选择操作：prepare、update、test、debug等
+- 可以随时切换应用或重新同步
+
+### 3. 常用命令
+
+#### 初始化本地开发环境（prepare）
+```bash
+# 在选中的应用目录下执行
+npm run prepare
+```
+- 导出 DSL/main.yml
+- 拆分 prompts/ 下的 .md 文件
+- 生成 test/inputs.json 和测试模板
+
+#### 合并并发布（update）
 ```bash
 npm run update
-# 或
-node cli.js update
 ```
-- 自动合并 prompts/ 下所有 llm 节点，生成新 main.yml，并导入 Dify 自动发布
+- 合并 prompts/ 下的所有 .md 文件
+- 生成新的 main.yml
+- 导入并发布到 Dify
 
-### 3. 批量自动化测试
+#### 批量测试（test）
 ```bash
 npm run test
 ```
-- 读取 test/testcases.json 和 test/inputs.json，自动调用 Dify 应用 API 进行批量验证
+- 读取 test/testcases.json
+- 自动调用 Dify API 进行批量验证
 
-### 4. 命令行对话测试
+#### 交互式测试（test:chat）
 ```bash
 npm run test:chat
 ```
-- 支持与 Dify 应用实时对话，自动带上 test/inputs.json 的必填变量
+- 支持实时对话测试
+- 自动带上 test/inputs.json 的变量
 
-### 5. 多环境支持
+#### Workflow 测试（test:workflow）
 ```bash
-npm run prepare:test
-npm run update:test
-npm run test -- --config config.test.json
-npm run test:chat -- --config config.test.json
+npm run test:workflow
 ```
+- 专门针对 workflow 模式的测试
+- 使用 test/inputs.json 中的变量
 
-## 测试用例与变量输入
-- `test/testcases.json`：批量测试用例，支持 completion/chat 两种类型
-- `test/inputs.json`：自动生成的必填变量模板，测试时自动合并
+#### 网页调试（debug）
+```bash
+npm run debug
+```
+- 启动 Web 调试服务器
+- 提供可视化调试界面
 
-## 适用场景
-- 本地高效开发 Dify 工作流，支持多人协作、版本管理
-- prompt 工程、复杂多节点工作流的可读性和可维护性提升
-- 自动化回归测试，保障每次修改都能被验证
+## 🔧 开发流程
 
-## 迭代建议
-- 可扩展支持更多 Dify API、更多测试类型
-- 可集成 CI/CD 流程，实现自动化部署与测试
-- 支持更丰富的用例管理、结果比对与报告输出
+### 1. 应用开发
+1. 运行 `npm start` 选择应用
+2. 选择 "prepare" 导出 DSL 和拆分 prompt
+3. 编辑 `prompts/` 下的 .md 文件
+4. 选择 "update" 合并并发布
 
----
-如有建议或需求，欢迎 issue 或 PR！
+### 2. 应用测试
+1. 运行 `npm start` 选择应用
+2. 选择 "test" 进行批量测试
+3. 或选择 "test:chat" 进行交互式测试
+4. 或选择 "debug" 启动 Web 调试
 
-## License
+### 3. 多应用管理
+1. 运行 `npm start` 选择 "🔄 同步所有应用"
+2. 在应用列表中选择要操作的应用
+3. 选择 "切换应用" 在不同应用间切换
+
+## 📝 文件说明
+
+### Prompt 文件（.md格式）
+- `prompts/节点名.system.md` - 系统提示词
+- `prompts/节点名.user.md` - 用户提示词
+- `prompts/节点名.assistant.md` - 助手提示词
+- `prompts/节点名.json` - 节点其他参数
+
+### 测试文件
+- `test/inputs.json` - 必填变量模板
+- `test/inputs/1/` - 变量输入文件
+- `test/testcases.json` - 批量测试用例
+
+## 🎉 特性优势
+
+- **多应用管理**：支持同时管理多个 Dify 应用
+- **智能同步**：一键同步所有应用配置和 API Key
+- **Markdown 编辑**：prompt 文件使用 .md 格式，便于编辑
+- **独立配置**：每个应用有独立的配置和测试环境
+- **自动化测试**：支持批量测试和交互式测试
+- **版本控制友好**：应用数据不提交到 Git，保证安全性
+
+## 🔒 安全性
+
+- `apps/` 目录下的应用数据不会提交到 Git
+- 每个应用有独立的 API Key 配置
+- 支持多环境配置管理
+
+## 📄 License
+
 MIT 
