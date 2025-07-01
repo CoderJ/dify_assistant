@@ -90,7 +90,7 @@ async function main() {
   // 选择应用
   currentAppPath = await selectApplication();
   
-  const dslMode = getDSLMode(currentAppPath);
+  let dslMode = getDSLMode(currentAppPath);
   const availableInputSets = getAvailableInputSets(currentAppPath);
   
   console.log(`当前 DSL mode: ${dslMode}`);
@@ -103,17 +103,17 @@ async function main() {
     const choices = [
       { name: '初始化本地开发环境（prepare）', value: 'prepare' },
       { name: '合并并发布（update）', value: 'update' },
-      { name: '批量测试（test）', value: 'test' },
-      { name: '网页调试（debug）', value: 'debug' },
-      { name: '命令行对话测试（test:chat）', value: 'test:chat' },
-      { name: '切换应用', value: 'switch_app' }
     ];
 
     // 根据 DSL mode 添加 workflow 测试选项
     if (dslMode === 'workflow') {
       choices.push({ name: 'Workflow 测试（test:workflow）', value: 'test:workflow' });
+    } else if (dslMode === 'advanced-chat') {
+      choices.push({ name: '网页调试（debug）', value: 'debug' });
+      choices.push({ name: 'Chat 测试（test:chat）', value: 'test:chat' });
     }
 
+    choices.push({ name: '切换应用', value: 'switch_app' });
     choices.push({ name: '退出', value: 'exit' });
 
     const { action } = await prompt([
@@ -132,6 +132,7 @@ async function main() {
 
     if (action === 'switch_app') {
       currentAppPath = await selectApplication(true); // 跳过缓存，直接显示选择列表
+      dslMode = getDSLMode(currentAppPath);
       continue;
     }
 
