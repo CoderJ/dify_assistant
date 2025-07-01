@@ -9,7 +9,7 @@ const PORT = 3000;
 
 // 获取应用路径（从环境变量或当前目录）
 const appPath = process.env.APP_PATH || process.cwd();
-const rootConfigPath = path.join(__dirname, 'config.json');
+const rootConfigPath = path.join(process.cwd(), 'config.json');
 
 // 读取全局配置
 let globalConfig = {};

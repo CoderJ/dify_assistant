@@ -10,7 +10,7 @@ const defaultDbPath = path.join(
 );
 
 function getConfigDbPath() {
-  const configPath = path.join(__dirname, 'config.json');
+  const configPath = path.join(process.cwd(), 'config.json');
   if (fs.existsSync(configPath)) {
     try {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -23,7 +23,7 @@ function getConfigDbPath() {
 }
 
 function getLocalStorageDomain() { 
-  const configPath = path.join(__dirname, 'config.json');
+  const configPath = path.join(process.cwd(), 'config.json');
   if (fs.existsSync(configPath)) {
     try {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -37,7 +37,7 @@ function getLocalStorageDomain() {
 
 async function getDifyTokensFromChrome() {
   const chromeDbPath = getConfigDbPath();
-  const tmpDbPath = path.join(__dirname, 'tmp', 'leveldb');
+  const tmpDbPath = path.join(process.cwd(), 'tmp', 'leveldb');
   const tokens = {};
   try {
     // 清理旧的临时目录

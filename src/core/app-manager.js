@@ -4,11 +4,11 @@ const path = require('path');
 const yaml = require('js-yaml');
 const inquirer = require('inquirer');
 const axios = require('axios');
-const { getDifyTokensFromChrome } = require('./sync-chrome-tokens');
+const { getDifyTokensFromChrome } = require('../utils/sync-chrome-tokens');
 
 class AppManager {
   constructor() {
-    this.appsDir = path.join(__dirname, 'apps');
+    this.appsDir = path.join(process.cwd(), 'apps');
     this.ensureAppsDir();
   }
 
@@ -57,7 +57,7 @@ class AppManager {
 
   // 获取Dify token
   async getToken() {
-    const TOKEN_CACHE_FILE = path.join(__dirname, '.token_cache.json');
+    const TOKEN_CACHE_FILE = path.join(process.cwd(), '.token_cache.json');
     let tokenCache = null;
     
     if (tokenCache) return tokenCache;
@@ -87,7 +87,7 @@ class AppManager {
     }
 
     // 读取全局配置
-    const rootConfigPath = path.join(__dirname, 'config.json');
+    const rootConfigPath = path.join(process.cwd(), 'config.json');
     let globalConfig = {};
     try {
       globalConfig = JSON.parse(fs.readFileSync(rootConfigPath, 'utf-8'));

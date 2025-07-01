@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const axios = require('axios');
-const { getDifyTokensFromChrome } = require('./sync-chrome-tokens');
+const { getDifyTokensFromChrome } = require('../utils/sync-chrome-tokens');
 
 // 解析命令行参数
 const args = process.argv.slice(2);
@@ -24,7 +24,57 @@ const configFile = configArgIdx !== -1 ? args[configArgIdx + 1] : 'config.json';
 
 // 获取应用路径（从环境变量或当前目录）
 const appPath = process.env.APP_PATH || process.cwd();
-const rootConfigPath = path.join(__dirname, 'config.json');
+const rootConfigPath = path.join(process.cwd(), 'config.json');
+
+const TOKEN_CACHE_FILE = path.join(process.cwd(), '.token_cache.json');
+let tokenCache = null;
+
+// 确保缓存文件始终在项目根目录
+function findProjectRoot() {
+  let currentDir = process.cwd();
+  console.log(`🔍 开始查找项目根目录，当前目录: ${currentDir}`);
+  while (currentDir !== path.dirname(currentDir)) {
+    console.log(`🔍 检查目录: ${currentDir}`);
+    const configPath = path.join(currentDir, 'config.json');
+    if (fs.existsSync(configPath)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        // 检查是否包含全局配置（DIFY_BASE_URL）
+        if (config.DIFY_BASE_URL) {
+          console.log(`✅ 找到项目根目录: ${currentDir}`);
+          return currentDir;
+        }
+      } catch (e) {
+        // 忽略解析错误
+      }
+    }
+    currentDir = path.dirname(currentDir);
+  }
+  console.log(`⚠️ 未找到项目根目录，使用当前目录: ${process.cwd()}`);
+  return process.cwd(); // 如果找不到，返回当前目录
+}
+
+const projectRoot = findProjectRoot();
+const LAST_PROJECT_FILE = path.join(projectRoot, '.last_project');
+
+function getLastProjectPath() {
+  if (fs.existsSync(LAST_PROJECT_FILE)) {
+    return fs.readFileSync(LAST_PROJECT_FILE, 'utf-8').trim();
+  }
+  return null;
+}
+
+function setLastProjectPath(projectPath) {
+  console.log(`💾 缓存项目路径: ${projectPath}`);
+  console.log(`📁 缓存文件位置: ${LAST_PROJECT_FILE}`);
+  fs.writeFileSync(LAST_PROJECT_FILE, projectPath, 'utf-8');
+  console.log(`✅ 项目路径已缓存到: ${LAST_PROJECT_FILE}`);
+}
+
+// 立即缓存当前项目路径（只有在应用目录下才缓存）
+if (appPath !== projectRoot) {
+  setLastProjectPath(appPath);
+}
 
 // 读取全局配置
 let globalConfig = {};
@@ -61,9 +111,6 @@ console.log('  TEST_BASE_URL:', TEST_BASE_URL);
 // 使用正确的变量名
 const api_key = TEST_API_KEY;
 const api_base_url = DIFY_BASE_URL; // 这里应该是DIFY_BASE_URL，不是TEST_BASE_URL
-
-const TOKEN_CACHE_FILE = path.join(__dirname, '.token_cache.json');
-let tokenCache = null;
 
 async function getToken() {
   if (tokenCache) return tokenCache;
@@ -275,10 +322,29 @@ async function mergeAndUpdate() {
 
 // 命令分发
 if (command === 'export') {
-  exportAndSplit();
+  exportAndSplit().then(() => {
+    setLastProjectPath(appPath);
+  });
 } else if (command === 'update') {
-  mergeAndUpdate();
+  mergeAndUpdate().then(() => {
+    setLastProjectPath(appPath);
+  });
 } else {
+  // 支持 --select 参数强制重新选择
+  if (!args.includes('--select')) {
+    const lastProject = getLastProjectPath();
+    console.log(`🔍 检查自动切换: lastProject=${lastProject}, appPath=${appPath}`);
+    if (lastProject && lastProject !== appPath) {
+      console.log(`🔄 自动切换到上次调试的项目: ${lastProject}`);
+      process.chdir(lastProject);
+      // 自动执行 export，使用相对于项目根目录的路径
+      const cliPath = path.relative(lastProject, path.join(projectRoot, 'src', 'cli', 'cli.js'));
+      require('child_process').execSync(`node ${cliPath} export`, { stdio: 'inherit' });
+      process.exit(0);
+    } else {
+      console.log(`ℹ️ 无需切换: lastProject=${lastProject}, appPath=${appPath}`);
+    }
+  }
   console.log('用法: node cli.js export|update [--config config.test.json]');
   process.exit(1);
 } 

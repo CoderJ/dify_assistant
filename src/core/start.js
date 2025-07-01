@@ -36,13 +36,37 @@ function getAvailableInputSets(appPath) {
 }
 
 // 选择应用
-async function selectApplication() {
+async function selectApplication(skipCache = false) {
   appManager = new AppManager();
+  
+  // 检查是否有缓存的应用（除非明确跳过缓存）
+  if (!skipCache) {
+    const lastProjectFile = path.join(process.cwd(), '.last_project');
+    if (fs.existsSync(lastProjectFile)) {
+      try {
+        const lastProjectPath = fs.readFileSync(lastProjectFile, 'utf-8').trim();
+        // 检查缓存的应用是否存在
+        if (fs.existsSync(lastProjectPath)) {
+          const appInfo = appManager.getAppInfo(lastProjectPath);
+          console.log('🚀 Dify Assistant 多应用管理器');
+          console.log('=====================================\n');
+          console.log(`🎯 自动进入上次调试的应用: ${appInfo.displayName} (${appInfo.mode})`);
+          console.log(`📁 路径: ${lastProjectPath}\n`);
+          return lastProjectPath;
+        }
+      } catch (e) {
+        console.warn('读取缓存文件失败:', e.message);
+      }
+    }
+  }
   
   console.log('🚀 Dify Assistant 多应用管理器');
   console.log('=====================================\n');
   
   currentAppPath = await appManager.selectApp();
+  // 选择后立即写入缓存
+  const lastProjectFile = path.join(process.cwd(), '.last_project');
+  fs.writeFileSync(lastProjectFile, currentAppPath, 'utf-8');
   const appInfo = appManager.getAppInfo(currentAppPath);
   console.log(`\n🎯 当前应用: ${appInfo.displayName} (${appInfo.mode})`);
   console.log(`📁 路径: ${currentAppPath}\n`);
@@ -107,7 +131,7 @@ async function main() {
     }
 
     if (action === 'switch_app') {
-      currentAppPath = await selectApplication();
+      currentAppPath = await selectApplication(true); // 跳过缓存，直接显示选择列表
       continue;
     }
 
