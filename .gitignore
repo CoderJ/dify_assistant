@@ -16,7 +16,6 @@ yarn-error.log*
 *.tmp
 
 tmp/
-test/
 config.json
 *.token_cache.json
 .last_project
