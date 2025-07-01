@@ -22,15 +22,45 @@ const command = args[0];
 const configArgIdx = args.indexOf('--config');
 const configFile = configArgIdx !== -1 ? args[configArgIdx + 1] : 'config.json';
 
-// 读取配置
-let config;
+// 获取应用路径（从环境变量或当前目录）
+const appPath = process.env.APP_PATH || process.cwd();
+const rootConfigPath = path.join(__dirname, 'config.json');
+
+// 读取全局配置
+let globalConfig = {};
 try {
-  config = JSON.parse(fs.readFileSync(path.join(__dirname, configFile), 'utf-8'));
+  globalConfig = JSON.parse(fs.readFileSync(rootConfigPath, 'utf-8'));
 } catch (e) {
-  console.error(`请先在项目根目录创建 ${configFile} 配置文件！`);
+  console.error('请在项目根目录创建 config.json 全局配置文件！');
   process.exit(1);
 }
-const { DIFY_BASE_URL, APP_ID } = config;
+
+// 读取app配置
+let appConfig = {};
+try {
+  const configPath = path.join(appPath, configFile);
+  console.log(`📁 读取配置文件: ${configPath}`);
+  appConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  console.log('📋 读取到的appConfig:', appConfig);
+} catch (e) {
+  console.error('❌ 读取app配置失败:', e.message);
+  // 忽略，部分命令可能不需要
+}
+
+const APP_ID = appConfig.APP_ID || '';
+const TEST_API_KEY = appConfig.TEST_API_KEY || '';
+const DIFY_BASE_URL = globalConfig.DIFY_BASE_URL;
+const TEST_BASE_URL = globalConfig.TEST_BASE_URL;
+
+console.log('🔍 解析结果:');
+console.log('  APP_ID:', APP_ID);
+console.log('  TEST_API_KEY:', TEST_API_KEY ? TEST_API_KEY.substring(0, 10) + '...' : '');
+console.log('  DIFY_BASE_URL:', DIFY_BASE_URL);
+console.log('  TEST_BASE_URL:', TEST_BASE_URL);
+
+// 使用正确的变量名
+const api_key = TEST_API_KEY;
+const api_base_url = DIFY_BASE_URL; // 这里应该是DIFY_BASE_URL，不是TEST_BASE_URL
 
 const TOKEN_CACHE_FILE = path.join(__dirname, '.token_cache.json');
 let tokenCache = null;
@@ -98,11 +128,16 @@ function parsePromptMd(md) {
 async function exportAndSplit() {
   // 导出主DSL
   try {
+    const requestUrl = `${api_base_url}/console/api/apps/${APP_ID}/export?include_secret=false`;
+    console.log(`🔗 请求URL: ${requestUrl}`);
+    console.log(`📋 APP_ID: ${APP_ID}`);
+    console.log(`🌐 API_BASE_URL: ${api_base_url}`);
+    
     const res = await requestWithTokenRetry({
       method: 'get',
-      url: `${DIFY_BASE_URL}/console/api/apps/${APP_ID}/export?include_secret=false`
+      url: requestUrl
     });
-    const dslDir = path.join(__dirname, 'DSL');
+    const dslDir = path.join(appPath, 'DSL');
     if (!fs.existsSync(dslDir)) fs.mkdirSync(dslDir);
     let yamlContent = res.data;
     if (typeof yamlContent === 'object' && yamlContent.data) yamlContent = yamlContent.data;
@@ -110,12 +145,12 @@ async function exportAndSplit() {
     fs.writeFileSync(mainPath, yamlContent, 'utf-8');
     console.log('导出成功，文件已保存为 DSL/main.yml');
     // 拆分llm节点
-    const promptsDir = path.join(__dirname, 'prompts');
+    const promptsDir = path.join(appPath, 'prompts');
     if (!fs.existsSync(promptsDir)) fs.mkdirSync(promptsDir);
     const dsl = yaml.load(fs.readFileSync(mainPath, 'utf-8'));
     const nodes = dsl?.workflow?.graph?.nodes || [];
     // 自动生成inputs.json
-    const testDir = path.join(__dirname, 'test');
+    const testDir = path.join(appPath, 'test');
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir);
     const inputsPath = path.join(testDir, 'inputs.json');
     const startNode = nodes.find(n => n.data?.type === 'start');
@@ -142,18 +177,18 @@ async function exportAndSplit() {
       if (node?.data?.type === 'llm') {
         const title = node.data.title || `llm_${node.id}`;
         const safeTitle = safeFileName(title);
-        // prompt_template -> 多txt文件
+        // prompt_template -> 多md文件
         const prompts = node.data.prompt_template || [];
         for (let i = 0; i < prompts.length; i++) {
           const role = prompts[i].role;
-          const fileName = `${safeTitle}.${role}.txt`;
+          const fileName = `${safeTitle}.${role}.md`;
           fs.writeFileSync(path.join(promptsDir, fileName), prompts[i].text, 'utf-8');
         }
         // 其它参数 -> json
         const { prompt_template, ...rest } = node.data;
         fs.writeFileSync(path.join(promptsDir, `${safeTitle}.json`), JSON.stringify(rest, null, 2), 'utf-8');
         llmCount++;
-        console.log(`已导出: ${safeTitle}.[role].txt, ${safeTitle}.json`);
+        console.log(`已导出: ${safeTitle}.[role].md, ${safeTitle}.json`);
       }
     }
     if (llmCount === 0) {
@@ -170,8 +205,8 @@ async function exportAndSplit() {
 // 2. 合并llm节点并导入+发布
 async function mergeAndUpdate() {
   // 合并llm节点
-  const dslPath = path.join(__dirname, 'DSL', 'main.yml');
-  const promptsDir = path.join(__dirname, 'prompts');
+  const dslPath = path.join(appPath, 'DSL', 'main.yml');
+  const promptsDir = path.join(appPath, 'prompts');
   const dsl = yaml.load(fs.readFileSync(dslPath, 'utf-8'));
   const nodes = dsl?.workflow?.graph?.nodes || [];
   let llmCount = 0;
@@ -184,11 +219,11 @@ async function mergeAndUpdate() {
         console.warn(`跳过 ${title}，因缺少 json 文件。`);
         continue;
       }
-      // 读取所有 .role.txt 文件
+      // 读取所有 .role.md 文件
       const prompt_template = [];
-      const files = fs.readdirSync(promptsDir).filter(f => f.startsWith(`${safeTitle}.`) && f.endsWith('.txt'));
+      const files = fs.readdirSync(promptsDir).filter(f => f.startsWith(`${safeTitle}.`) && f.endsWith('.md'));
       for (const file of files) {
-        const m = file.match(/^.+\.(.+)\.txt$/);
+        const m = file.match(/^.+\.(.+)\.md$/);
         if (m) {
           const role = m[1];
           const text = fs.readFileSync(path.join(promptsDir, file), 'utf-8');
@@ -208,11 +243,10 @@ async function mergeAndUpdate() {
   console.log(`已生成新的 main.yml，llm 节点共合并 ${llmCount} 个。`);
   // 导入+发布
   try {
-    // const yamlContent = fs.readFileSync(dslPath, 'utf-8');
-    const yamlContent = fs.readFileSync(path.join(__dirname, 'DSL', 'Auto_Correct.yml'), 'utf-8');
+    const yamlContent = fs.readFileSync(dslPath, 'utf-8');
     const res = await requestWithTokenRetry({
       method: 'post',
-      url: `${DIFY_BASE_URL}/console/api/apps/imports`,
+      url: `${api_base_url}/console/api/apps/imports`,
       data: {
         mode: 'yaml-content',
         yaml_content: yamlContent,
@@ -226,7 +260,7 @@ async function mergeAndUpdate() {
     // 自动发布
     const publishRes = await requestWithTokenRetry({
       method: 'post',
-      url: `${DIFY_BASE_URL}/console/api/apps/${APP_ID}/workflows/publish`,
+      url: `${api_base_url}/console/api/apps/${APP_ID}/workflows/publish`,
       data: { marked_name: '', marked_comment: '' },
       headers: {
         'Content-Type': 'application/json'

@@ -7,24 +7,36 @@ const axios = require('axios');
 const app = express();
 const PORT = 3000;
 
+// 获取应用路径（从环境变量或当前目录）
+const appPath = process.env.APP_PATH || process.cwd();
+const rootConfigPath = path.join(__dirname, 'config.json');
+
+// 读取全局配置
+let globalConfig = {};
+try {
+  globalConfig = JSON.parse(fs.readFileSync(rootConfigPath, 'utf-8'));
+} catch (e) {
+  console.error('请在项目根目录创建 config.json 全局配置文件！');
+  process.exit(1);
+}
+
+// 读取app配置
+let appConfig = {};
+try {
+  appConfig = JSON.parse(fs.readFileSync(path.join(appPath, 'config.json'), 'utf-8'));
+} catch (e) {
+  // 忽略
+}
+
+const APP_ID = appConfig.APP_ID || '';
+const TEST_API_KEY = appConfig.TEST_API_KEY || '';
+const DIFY_BASE_URL = globalConfig.DIFY_BASE_URL;
+const TEST_BASE_URL = globalConfig.TEST_BASE_URL;
+
 // 中间件
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.')); // 提供静态文件服务
-
-// 读取配置
-let config;
-try {
-  config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf-8'));
-} catch (e) {
-  console.error('请先创建 config.json 配置文件！');
-  console.log('示例配置:');
-  console.log(JSON.stringify({
-    "TEST_BASE_URL": "https://cloud.dify.ai",
-    "TEST_API_KEY": "your-api-token"
-  }, null, 2));
-  process.exit(1);
-}
 
 // 提供调试页面
 app.get('/', (req, res) => {
@@ -80,7 +92,7 @@ app.post('/api/chat', async (req, res) => {
 
     // 调用Dify Chat API - 流式模式
     const difyResponse = await axios.post(
-      `${config.TEST_BASE_URL}/v1/chat-messages`,
+      `${DIFY_BASE_URL}/v1/chat-messages`,
       {
         inputs: inputs,
         query: query,
@@ -90,7 +102,7 @@ app.post('/api/chat', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${config.TEST_API_KEY}`,
+          'Authorization': `Bearer ${TEST_API_KEY}`,
           'Content-Type': 'application/json'
         },
         responseType: 'stream' // 设置响应类型为流
@@ -171,9 +183,10 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    config_loaded: !!config,
+    config_loaded: !!appConfig,
     api_type: 'streaming_chat',
-    dsl_version: '0.1.5'
+    dsl_version: '0.1.5',
+    app_path: appPath
   });
 });
 
@@ -182,6 +195,7 @@ app.listen(PORT, () => {
   console.log(`访问地址: http://localhost:${PORT}`);
   console.log(`流式聊天API端点: http://localhost:${PORT}/api/chat`);
   console.log(`健康检查: http://localhost:${PORT}/api/health`);
+  console.log(`当前应用路径: ${appPath}`);
   console.log('');
   console.log('使用说明:');
   console.log('1. 在浏览器打开 http://localhost:3000');

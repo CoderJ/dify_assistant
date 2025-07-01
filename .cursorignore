@@ -1,0 +1,22 @@
+# Cursor 忽略配置
+# 注意：不要在这里添加 apps/，确保 Cursor 能正常索引应用目录
+
+# 忽略 node_modules
+node_modules/
+
+# 忽略日志文件
+*.log
+
+# 忽略系统文件
+.DS_Store
+
+# 忽略临时文件
+tmp/
+*.tmp
+
+# 忽略 token 缓存
+*.token_cache.json
+
+# 忽略编辑器配置
+.vscode/
+.idea/ 

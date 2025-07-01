@@ -9,6 +9,7 @@
     "update:test": "node cli.js update --config config.test.json",
     "test": "node test.js",
     "test:chat": "node test.js chat",
+    "test:workflow": "node test.js workflow",
     "start": "node start.js",
     "debug": "node debug-server.js"
   },
