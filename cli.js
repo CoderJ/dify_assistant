@@ -208,7 +208,8 @@ async function mergeAndUpdate() {
   console.log(`已生成新的 main.yml，llm 节点共合并 ${llmCount} 个。`);
   // 导入+发布
   try {
-    const yamlContent = fs.readFileSync(dslPath, 'utf-8');
+    // const yamlContent = fs.readFileSync(dslPath, 'utf-8');
+    const yamlContent = fs.readFileSync(path.join(__dirname, 'DSL', 'Auto_Correct.yml'), 'utf-8');
     const res = await requestWithTokenRetry({
       method: 'post',
       url: `${DIFY_BASE_URL}/console/api/apps/imports`,

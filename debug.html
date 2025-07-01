@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会议助手调试工具 - 流式响应</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            background-color: #f5f5f5;
+        }
+
+        .left-panel {
+            width: 35%;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .right-panel {
+            width: 65%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .config-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .config-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .config-label {
+            font-weight: 500;
+            min-width: 60px;
+            color: #555;
+        }
+
+        .config-select {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .config-select:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        .transcription-input {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 14px;
+            font-family: monospace;
+            resize: none;
+            outline: none;
+            margin-bottom: 15px;
+        }
+
+        .transcription-input:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background: #f8f9fa;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .chat-input-area {
+            border-top: 1px solid #e0e0e0;
+            padding: 20px;
+            background: white;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .quick-btn {
+            padding: 8px 16px;
+            border: 1px solid #007bff;
+            border-radius: 20px;
+            background: white;
+            color: #007bff;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:hover {
+            background: #007bff;
+            color: white;
+        }
+
+        .quick-btn.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            min-height: 40px;
+            max-height: 120px;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            resize: none;
+            outline: none;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .chat-input:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        .send-btn {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .send-btn:hover {
+            background: #0056b3;
+        }
+
+        .send-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background-color: #007bff;
+            color: white;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background-color: #f1f3f4;
+            color: #333;
+        }
+
+        .message.system {
+            align-self: center;
+            background-color: #fff3cd;
+            color: #856404;
+            font-size: 12px;
+            max-width: 90%;
+        }
+
+        .questions-list {
+            margin-top: 10px;
+        }
+
+        .question-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .question-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .question-item .question {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .question-item .time {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .loading {
+            display: none;
+            align-self: flex-start;
+            background-color: #f1f3f4;
+            color: #666;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-style: italic;
+        }
+
+        .streaming-message {
+            position: relative;
+        }
+
+        .streaming-message::after {
+            content: '|';
+            animation: blink 1s infinite;
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .format-note {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: #0066cc;
+        }
+
+        .ai-button-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .ai-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 40px;
+            border: none;
+            border-radius: 50px;
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+            min-width: 200px;
+        }
+
+        .ai-button:hover {
+            background: linear-gradient(135deg, #0056b3, #004085);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+        }
+
+        .ai-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(0, 123, 255, 0.3);
+        }
+
+        .ai-button-icon {
+            font-size: 24px;
+            margin-right: 12px;
+        }
+
+        .ai-button-text {
+            font-size: 18px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="left-panel">
+        <h2 class="panel-title">会议助手配置</h2>
+        
+        <div class="config-section">
+            <div class="config-row">
+                <label class="config-label">场景:</label>
+                <select class="config-select" id="sceneSelect">
+                    <option value="meeting">会议 (meeting)</option>
+                    <option value="interview">面试 (interview)</option>
+                    <option value="talk">访谈 (talk)</option>
+                </select>
+            </div>
+            <div class="config-row">
+                <label class="config-label">角色:</label>
+                <select class="config-select" id="roleSelect">
+                    <option value="participant">参与者 (participant)</option>
+                    <option value="moderator">主持人 (moderator)</option>
+                    <option value="presenter">演讲者 (presenter)</option>
+                    <option value="candidate">候选人 (candidate)</option>
+                    <option value="interviewer">面试官 (interviewer)</option>
+                    <option value="guest">嘉宾 (guest)</option>
+                    <option value="host">主持人 (host)</option>
+                </select>
+            </div>
+        </div>
+
+        <h2 class="panel-title">会议转录输入</h2>
+        
+        <div class="format-note">
+            <strong>说明：</strong>在此输入实时的会议转录内容，支持纯文本格式。
+        </div>
+        
+        <textarea class="transcription-input" id="transcriptionInput" placeholder='请输入转录内容，例如：
+
+主持人 [00:10]: 大家好，今天我们讨论一下新产品的上市计划。首先请产品经理介绍一下产品特性。
+
+产品经理 [00:25]: 这个产品主要有三个核心功能：智能推荐、数据分析和用户画像。预计下个月可以完成开发。
+
+市场总监 [00:45]: 听起来不错。那么我们的目标用户群体是什么？定价策略有考虑过吗？
+
+产品经理 [01:05]: 目标用户主要是中小企业。定价方面我们还在评估，希望能听听大家的意见。
+
+或者直接输入纯文本格式的转录内容...'></textarea>
+
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="clearTranscription()">清空</button>
+            <button class="btn btn-secondary" id="loadSampleBtn" onclick="loadSample()">加载示例</button>
+            <button class="btn btn-secondary" id="pauseLoadingBtn" onclick="pauseLoading()" style="display: none;">⏸️ 暂停</button>
+            <button class="btn btn-secondary" id="resumeLoadingBtn" onclick="resumeLoading()" style="display: none;">▶️ 继续</button>
+            <button class="btn btn-secondary" id="fastForwardBtn" onclick="fastForward15s()" style="display: none;">⏩ 快进15秒</button>
+        </div>
+        
+        <div id="loadingProgress" style="display: none; margin-top: 10px; padding: 10px; background: #f0f8ff; border-radius: 6px; font-size: 12px;">
+            <div id="loadingStatus">正在模拟会议转录中...</div>
+            <div id="progressText">已加载: 0 / 0</div>
+            <div style="margin-top: 5px; background: #e0e0e0; border-radius: 3px; height: 4px;">
+                <div id="progressBar" style="background: #007bff; height: 100%; border-radius: 3px; width: 0%; transition: width 0.3s;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="right-panel">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2 class="panel-title">AI 助手对话</h2>
+                <button class="btn btn-secondary" onclick="clearChat()">清空对话</button>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system">
+                    欢迎使用会议助手！使用流式响应，AI回答会实时显示。请配置场景和角色，输入转录内容，然后使用下方的AI助手按钮开始对话。
+                </div>
+            </div>
+
+            <div class="loading" id="loadingIndicator">
+                AI正在处理中...
+            </div>
+
+            <div class="chat-input-area">
+                <div class="ai-button-container">
+                    <button class="ai-button" onclick="sendAIRequest()">
+                        <div class="ai-button-icon">🤖</div>
+                        <div class="ai-button-text">AI 助手</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentConversationId = "";
+        let lastRequestType = "";
+        let lastAnswer = "";
+        let lastQuestion = "";
+        let loadingTimer = null;
+        let currentLoadingIndex = 0;
+        let isPaused = false;
+        let loadingSpeed = 1000; // 默认1秒间隔
+        let meetingData = []; // 将从test.json动态加载
+        
+        function clearTranscription() {
+            // 停止正在进行的加载
+            if (loadingTimer) {
+                clearTimeout(loadingTimer);
+                loadingTimer = null;
+            }
+            document.getElementById('transcriptionInput').value = '';
+            currentLoadingIndex = 0;
+            isPaused = false;
+            
+            // 恢复按钮状态
+            document.getElementById('loadSampleBtn').style.display = 'inline-block';
+            document.getElementById('pauseLoadingBtn').style.display = 'none';
+            document.getElementById('resumeLoadingBtn').style.display = 'none';
+            document.getElementById('fastForwardBtn').style.display = 'none';
+            document.getElementById('loadingProgress').style.display = 'none';
+        }
+
+        function loadSample() {
+            // 停止之前的加载（如果有的话）
+            if (loadingTimer) {
+                clearTimeout(loadingTimer);
+                loadingTimer = null;
+            }
+            
+            // 清空当前内容
+            document.getElementById('transcriptionInput').value = '';
+            currentLoadingIndex = 0;
+            isPaused = false;
+            
+            // 显示加载状态
+            document.getElementById('loadSampleBtn').style.display = 'none';
+            document.getElementById('pauseLoadingBtn').style.display = 'none';
+            document.getElementById('resumeLoadingBtn').style.display = 'none';
+            document.getElementById('fastForwardBtn').style.display = 'none';
+            document.getElementById('loadingProgress').style.display = 'block';
+            document.getElementById('loadingStatus').textContent = '正在加载会议数据...';
+            
+            // 先加载test.json数据
+            fetch('test.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('无法加载test.json文件');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    meetingData = data;
+                    console.log(`成功加载 ${meetingData.length} 条会议记录`);
+                    
+                    // 开始模拟加载
+                    document.getElementById('loadingStatus').textContent = '正在模拟会议转录中...';
+                    document.getElementById('pauseLoadingBtn').style.display = 'inline-block';
+                    document.getElementById('fastForwardBtn').style.display = 'inline-block';
+                    loadNextItem();
+                })
+                .catch(error => {
+                    console.error('加载test.json失败:', error);
+                    document.getElementById('loadingStatus').textContent = '加载失败: ' + error.message;
+                    document.getElementById('loadSampleBtn').style.display = 'inline-block';
+                    document.getElementById('loadingProgress').style.display = 'none';
+                });
+        }
+        
+        function loadNextItem() {
+            if (isPaused) return;
+            
+            if (currentLoadingIndex >= meetingData.length) {
+                // 加载完成
+                document.getElementById('loadingStatus').textContent = '会议转录完成！';
+                document.getElementById('loadSampleBtn').style.display = 'inline-block';
+                document.getElementById('pauseLoadingBtn').style.display = 'none';
+                document.getElementById('resumeLoadingBtn').style.display = 'none';
+                document.getElementById('fastForwardBtn').style.display = 'none';
+                document.getElementById('loadingProgress').style.display = 'none';
+                return;
+            }
+            
+            const item = meetingData[currentLoadingIndex];
+            const currentText = document.getElementById('transcriptionInput').value;
+            const newContent = `${item.speaker} [${item.startTime}]: ${item.content}\n\n`;
+            document.getElementById('transcriptionInput').value = currentText + newContent;
+            
+            currentLoadingIndex++;
+            updateProgress();
+            
+            // 计算下一个项目的延迟时间
+            let nextDelay = 1000; // 默认1秒
+            if (currentLoadingIndex < meetingData.length) {
+                const currentTime = parseTimeToSeconds(item.startTime);
+                const nextTime = parseTimeToSeconds(meetingData[currentLoadingIndex].startTime);
+                const timeDiff = nextTime - currentTime;
+                // 根据时间差调整加载速度，但不超过3秒
+                nextDelay = Math.min(timeDiff * 1000, 3000);
+            }
+            
+            loadingTimer = setTimeout(loadNextItem, nextDelay);
+        }
+        
+        function parseTimeToSeconds(timeStr) {
+            const parts = timeStr.split(':');
+            return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        }
+        
+        function updateProgress() {
+            const progress = (currentLoadingIndex / meetingData.length) * 100;
+            document.getElementById('progressText').textContent = `已加载: ${currentLoadingIndex} / ${meetingData.length}`;
+            document.getElementById('progressBar').style.width = progress + '%';
+        }
+        
+        function pauseLoading() {
+            isPaused = true;
+            if (loadingTimer) {
+                clearTimeout(loadingTimer);
+                loadingTimer = null;
+            }
+            document.getElementById('pauseLoadingBtn').style.display = 'none';
+            document.getElementById('resumeLoadingBtn').style.display = 'inline-block';
+            document.getElementById('loadingStatus').textContent = '已暂停';
+        }
+        
+        function resumeLoading() {
+            isPaused = false;
+            document.getElementById('pauseLoadingBtn').style.display = 'inline-block';
+            document.getElementById('resumeLoadingBtn').style.display = 'none';
+            document.getElementById('loadingStatus').textContent = '正在模拟会议转录中...';
+            loadNextItem();
+        }
+
+        function addMessage(type, content, isJson = false) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            if (isJson && type === 'assistant') {
+                // 处理JSON响应
+                try {
+                    const jsonData = JSON.parse(content);
+                    
+                    if (jsonData.type === 'questions' && jsonData.questions) {
+                        // 处理发现问题响应
+                        const textContent = document.createElement('div');
+                        textContent.textContent = '发现以下问题， 点击以让AI进行作答：';
+                        messageDiv.appendChild(textContent);
+                        
+                        const questionsList = document.createElement('div');
+                        questionsList.className = 'questions-list';
+                        
+                        jsonData.questions.forEach((q, index) => {
+                            const questionItem = document.createElement('div');
+                            questionItem.className = 'question-item';
+                            questionItem.onclick = () => selectQuestion(q.question);
+                            
+                            const questionText = document.createElement('div');
+                            questionText.className = 'question';
+                            questionText.textContent = `${index + 1}. ${q.question}`;
+                            questionItem.appendChild(questionText);
+                            
+                            if (q.time) {
+                                const timeText = document.createElement('div');
+                                timeText.className = 'time';
+                                timeText.textContent = `时间: ${q.time}`;
+                                questionItem.appendChild(timeText);
+                            }
+                            
+                            questionsList.appendChild(questionItem);
+                        });
+                        
+                        messageDiv.appendChild(questionsList);
+                    } else {
+                        // 如果不是已知格式，直接显示文本内容
+                        messageDiv.textContent = content;
+                    }
+                } catch (e) {
+                    messageDiv.textContent = content;
+                }
+            } else {
+                messageDiv.textContent = content;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function selectQuestion(question) {
+            console.log('选择问题:', question);
+            lastQuestion = question; // 记住被选择的问题
+            addMessage('system', `已选择问题: ${question}`);
+            
+            // 自动发送回答问题请求
+            setTimeout(() => {
+                sendRequest('answer_question', question);
+            }, 500);
+        }
+
+        function sendAIRequest() {
+            const transcription = document.getElementById('transcriptionInput').value.trim();
+            
+            if (!transcription) {
+                addMessage('system', '请先在左侧输入转录内容');
+                return;
+            }
+
+            addMessage('user', '🤖 请求AI助手帮助');
+            
+            // 发送AI请求
+            sendRequest('ai_help', '');
+        }
+
+        function showLoading() {
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingIndicator').style.display = 'none';
+        }
+
+        async function sendRequest(requestType, requestContent) {
+            const transcription = document.getElementById('transcriptionInput').value.trim();
+            const scene = document.getElementById('sceneSelect').value;
+            const role = document.getElementById('roleSelect').value;
+            
+            if (!transcription) {
+                addMessage('system', '请先在左侧输入转录内容');
+                return;
+            }
+
+            const requestData = {
+                transcription: transcription,
+                scene: scene,
+                role: role,
+                request_type: requestType,
+                request_content: requestContent,
+                conversation_id: currentConversationId
+            };
+
+            lastRequestType = requestType;
+
+            showLoading();
+
+            try {
+                let response;
+                
+                // 使用流式API
+                response = await fetch('http://localhost:3000/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                hideLoading();
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                // 处理流式响应
+                await handleStreamingResponse(response);
+
+            } catch (error) {
+                hideLoading();
+                addMessage('system', `请求失败: ${error.message}`);
+            }
+        }
+
+        async function handleStreamingResponse(response) {
+            // 创建消息容器用于流式显示
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant streaming-message';
+            messageDiv.id = 'streaming-message';
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            let fullAnswer = '';
+            let conversationId = '';
+            let messageId = '';
+
+            // 创建EventSource来读取流式响应
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                    break;
+                }
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6); // 移除 'data: ' 前缀
+                        
+                        if (data === '[DONE]') {
+                            break;
+                        }
+
+                        try {
+                            const parsed = JSON.parse(data);
+                            
+                            if (parsed.type === 'content') {
+                                // 添加新的内容到消息中
+                                fullAnswer += parsed.content;
+                                messageDiv.textContent = fullAnswer;
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                                
+                                // 保存conversation_id和message_id
+                                if (parsed.conversation_id) conversationId = parsed.conversation_id;
+                                if (parsed.message_id) messageId = parsed.message_id;
+                            } else if (parsed.type === 'error') {
+                                // 显示错误
+                                messageDiv.textContent = `错误: ${parsed.error}`;
+                                messageDiv.className = 'message system';
+                                break;
+                            } else if (parsed.type === 'done') {
+                                // 流结束
+                                if (parsed.conversation_id) conversationId = parsed.conversation_id;
+                                if (parsed.message_id) messageId = parsed.message_id;
+                                break;
+                            }
+                        } catch (e) {
+                            console.log('解析流数据时出错:', e);
+                        }
+                    }
+                }
+            }
+
+            // 保存conversation_id
+            if (conversationId) {
+                currentConversationId = conversationId;
+            }
+
+            // 保存最后的答案
+            lastAnswer = fullAnswer;
+
+            // 尝试解析Judge Function的JSON响应
+            try {
+                const jsonAnswer = JSON.parse(fullAnswer);
+                if (jsonAnswer.function) {
+                    // 这是Judge Function的响应，提取function值
+                    messageDiv.textContent = jsonAnswer.function;
+                    lastAnswer = jsonAnswer.function;
+                    console.log('Judge Function返回的function:', jsonAnswer.function);
+                }
+            } catch (e) {
+                // 不是JSON格式，保持原样
+                console.log('响应不是JSON格式，保持原样');
+            }
+
+            // 移除临时ID和流式样式
+            messageDiv.removeAttribute('id');
+            messageDiv.classList.remove('streaming-message');
+        }
+
+        function clearChat() {
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = `
+                <div class="message system">
+                    对话已清空。请继续与AI助手对话。
+                </div>
+            `;
+            currentConversationId = "";
+            lastRequestType = "";
+            lastAnswer = "";
+            lastQuestion = "";
+        }
+
+        // 绑定回车发送
+        document.getElementById('transcriptionInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendAIRequest();
+            }
+        });
+
+        // 自动调整输入框高度
+        document.getElementById('transcriptionInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        // 页面加载完成后检查test.json文件
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查test.json文件是否存在
+            fetch('test.json')
+                .then(response => {
+                    if (response.ok) {
+                        console.log('test.json文件存在，可以开始加载示例');
+                        document.getElementById('loadSampleBtn').disabled = false;
+                    } else {
+                        throw new Error('test.json文件不存在');
+                    }
+                })
+                .catch(error => {
+                    console.warn('test.json文件不存在或无法访问:', error);
+                    document.getElementById('loadSampleBtn').disabled = true;
+                    document.getElementById('loadSampleBtn').title = 'test.json文件不存在';
+                });
+        });
+
+        function fastForward15s() {
+            if (isPaused) return;
+            
+            // 计算当前时间点
+            let currentTime = 0;
+            if (currentLoadingIndex > 0 && currentLoadingIndex < meetingData.length) {
+                currentTime = parseTimeToSeconds(meetingData[currentLoadingIndex - 1].startTime);
+            }
+            
+            // 目标时间：当前时间 + 15秒
+            const targetTime = currentTime + 15;
+            
+            // 找到目标时间后的第一个项目
+            let targetIndex = currentLoadingIndex;
+            while (targetIndex < meetingData.length) {
+                const itemTime = parseTimeToSeconds(meetingData[targetIndex].startTime);
+                if (itemTime >= targetTime) {
+                    break;
+                }
+                targetIndex++;
+            }
+            
+            // 如果找到了目标项目，快速加载到该位置
+            if (targetIndex < meetingData.length) {
+                // 清除当前定时器
+                if (loadingTimer) {
+                    clearTimeout(loadingTimer);
+                    loadingTimer = null;
+                }
+                
+                // 快速加载到目标位置
+                while (currentLoadingIndex < targetIndex) {
+                    const item = meetingData[currentLoadingIndex];
+                    const currentText = document.getElementById('transcriptionInput').value;
+                    const newContent = `${item.speaker} [${item.startTime}]: ${item.content}\n\n`;
+                    document.getElementById('transcriptionInput').value = currentText + newContent;
+                    currentLoadingIndex++;
+                }
+                
+                updateProgress();
+                
+                // 继续正常加载
+                loadNextItem();
+            }
+        }
+    </script>
+</body>
+</html> 

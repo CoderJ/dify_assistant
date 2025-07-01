@@ -16,6 +16,7 @@ async function main() {
           { name: '初始化本地开发环境（prepare）', value: 'prepare' },
           { name: '合并并发布（update）', value: 'update' },
           { name: '批量测试（test）', value: 'test' },
+          { name: '网页调试（debug）', value: 'debug' },
           { name: '命令行对话测试（test:chat）', value: 'test:chat' },
           { name: '退出', value: 'exit' }
         ]
@@ -29,6 +30,7 @@ async function main() {
     if (action === 'prepare') cmd = 'npm run prepare';
     if (action === 'update') cmd = 'npm run update';
     if (action === 'test') cmd = 'npm run test';
+    if (action === 'debug') cmd = 'npm run debug';
     if (action === 'test:chat') {
       // 检查本地有多少组inputs
       const inputsRoot = path.join(__dirname, 'test', 'inputs');

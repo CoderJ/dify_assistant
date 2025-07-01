@@ -22,6 +22,19 @@ function getConfigDbPath() {
   return defaultDbPath;
 }
 
+function getLocalStorageDomain() { 
+  const configPath = path.join(__dirname, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config.DIFY_BASE_URL) {
+        return config.DIFY_BASE_URL.replace(/^https?\:\/\//,'');
+      }
+    } catch (e) { }
+  }
+  return 'cloud.dify.ai';
+}
+
 async function getDifyTokensFromChrome() {
   const chromeDbPath = getConfigDbPath();
   const tmpDbPath = path.join(__dirname, 'tmp', 'leveldb');
@@ -33,8 +46,9 @@ async function getDifyTokensFromChrome() {
     }
     await fse.copy(chromeDbPath, tmpDbPath);
     const db = new Level(tmpDbPath, { valueEncoding: 'utf8' });
+    console.log(getLocalStorageDomain());
     for await (const [key, value] of db.iterator()) {
-      if (key.includes('cloud.dify.ai')) {
+      if (key.includes(getLocalStorageDomain())) {
         if (key.includes('console_token')) tokens.API_TOKEN = value;
         if (key.includes('refresh_token')) tokens.API_REFRESH_TOKEN = value;
       }

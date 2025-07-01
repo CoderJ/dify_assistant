@@ -22,6 +22,8 @@ tmp/
 test/
 config.json
 *.token_cache.json
+*.json
+*.yml
 
 
 
