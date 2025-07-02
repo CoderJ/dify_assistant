@@ -1,8 +1,5 @@
 {
   "DIFY_BASE_URL": "https://cloud.dify.ai",
-  "API_TOKEN": "从浏览器LocalStorage里复制",
-  "API_REFRESH_TOKEN" : "从浏览器LocalStorage里复制",
-  "APP_ID": "从URL中复制",
   "TEST_BASE_URL" : "https://api.dify.ai",
-  "TEST_API_KEY" : "应用左侧生成"
+  "CHROME_LEVELDB_PATH": "~/Library/Application Support/Google/Chrome/Default/Local Storage/leveldb"
 } 

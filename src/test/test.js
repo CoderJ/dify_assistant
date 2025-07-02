@@ -81,7 +81,7 @@ function mergeInputs(globalInputs, testInputs) {
   const merged = { ...globalInputs };
   for (const [key, value] of Object.entries(testInputs)) {
     // 如果测试 inputs 中的值为 null，但全局 inputs 中有该字段的有效值，则保留全局值
-    if (value === null && globalInputs[key] !== undefined) {
+    if ((value === null || value === undefined || value === '' || value === 0) && globalInputs[key] !== undefined) {
       continue; // 跳过，保留全局值
     }
     merged[key] = value;
