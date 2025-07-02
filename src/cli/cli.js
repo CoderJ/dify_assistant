@@ -217,6 +217,16 @@ async function exportAndSplit() {
 
 // 2. 合并llm节点并导入+发布
 async function mergeAndUpdate() {
+  // 检查是否为PRODUCTION标签的应用
+  const appName = path.basename(appPath);
+  if (appName.includes('-PRODUCTION-')) {
+    console.error('❌ 安全限制：检测到PRODUCTION标签的应用，不允许执行update操作！');
+    console.error('📝 应用名称:', appName);
+    console.error('🔒 为了保护生产环境，PRODUCTION标签的应用禁止update操作');
+    console.error('💡 如需更新，请先将应用标签改为TEST，或联系管理员');
+    process.exit(1);
+  }
+
   // 合并llm节点
   const dslPath = path.join(appPath, 'DSL', 'main.yml');
   const promptsDir = path.join(appPath, 'prompts');

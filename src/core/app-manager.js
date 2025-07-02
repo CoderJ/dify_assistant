@@ -379,25 +379,85 @@ class AppManager {
       }
     }
 
-    const choices = apps.map(app => ({
-      name: `${app.displayName} (${app.name}) - ${app.mode}${app.initialized ? '' : ' - 未初始化'}`,
-      value: app.path
-    }));
+    // 按tag分组应用
+    const appsByTag = {};
+    const tagNames = new Set();
+    
+    apps.forEach(app => {
+      const tag = this.getAppTag(app.path);
+      const tagName = tag || '无标签';
+      tagNames.add(tagName);
+      
+      if (!appsByTag[tagName]) {
+        appsByTag[tagName] = [];
+      }
+      appsByTag[tagName].push(app);
+    });
 
-    choices.push({ name: '🔄 同步所有应用', value: 'sync_all' });
+    // 构建tag选择列表
+    const tagChoices = [];
+    const tagOrder = { 'TEST': 1, 'PRODUCTION': 2, '无标签': 3 };
+    
+    Array.from(tagNames).sort((a, b) => (tagOrder[a] || 99) - (tagOrder[b] || 99)).forEach(tagName => {
+      const appCount = appsByTag[tagName].length;
+      let tagIcon = '⚪';
+      if (tagName === 'TEST') tagIcon = '🟢';
+      else if (tagName === 'PRODUCTION') tagIcon = '🔴';
+      
+      tagChoices.push({
+        name: `${tagIcon} ${tagName} (${appCount}个应用)`,
+        value: tagName
+      });
+    });
+
+    tagChoices.push({ name: '🔄 同步所有应用', value: 'sync_all' });
+
+    // 选择tag
+    const { selectedTag } = await prompt([
+      {
+        type: 'list',
+        name: 'selectedTag',
+        message: '请选择应用环境：',
+        choices: tagChoices
+      }
+    ]);
+
+    if (selectedTag === 'sync_all') {
+      await this.syncAllApps();
+      return await this.selectApp(); // 重新选择
+    }
+
+    // 显示选中tag下的应用
+    const appsInTag = appsByTag[selectedTag] || [];
+    console.log(`\n📋 ${selectedTag} 环境下的应用 (${appsInTag.length}个):`);
+    
+    const appChoices = appsInTag.map(app => {
+      const appTag = this.getAppTag(app.path);
+      let tagDisplay = '';
+      if (appTag) {
+        const tagIcon = appTag === 'PRODUCTION' ? '🔴' : '🟢';
+        tagDisplay = ` ${tagIcon}${appTag}`;
+      }
+      return {
+        name: `${app.displayName} (${app.name}) - ${app.mode}${tagDisplay}${app.initialized ? '' : ' - 未初始化'}`,
+        value: app.path
+      };
+    });
+
+    // 添加返回上级选项
+    appChoices.push({ name: '⬅️ 返回环境选择', value: 'back_to_tags' });
 
     const { selectedApp } = await prompt([
       {
         type: 'list',
         name: 'selectedApp',
-        message: '请选择应用：',
-        choices
+        message: `请选择 ${selectedTag} 环境下的应用：`,
+        choices: appChoices
       }
     ]);
 
-    if (selectedApp === 'sync_all') {
-      await this.syncAllApps();
-      return await this.selectApp(); // 重新选择
+    if (selectedApp === 'back_to_tags') {
+      return await this.selectApp(); // 重新选择tag
     }
 
     return selectedApp;
@@ -445,6 +505,29 @@ class AppManager {
     } catch (e) {
       return false;
     }
+  }
+
+  // 检查应用是否具有PRODUCTION标签
+  isProductionApp(appPath) {
+    const appName = path.basename(appPath);
+    return appName.includes('-PRODUCTION-');
+  }
+
+  // 检查应用是否具有TEST标签
+  isTestApp(appPath) {
+    const appName = path.basename(appPath);
+    return appName.includes('-TEST-');
+  }
+
+  // 获取应用标签
+  getAppTag(appPath) {
+    const appName = path.basename(appPath);
+    if (appName.includes('-PRODUCTION-')) {
+      return 'PRODUCTION';
+    } else if (appName.includes('-TEST-')) {
+      return 'TEST';
+    }
+    return null;
   }
 
   // 处理DSL并初始化应用

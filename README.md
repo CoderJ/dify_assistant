@@ -81,7 +81,8 @@ npm start
 ```bash
 npm start
 ```
-- 选择要操作的应用
+- 先选择应用环境（TEST/PRODUCTION/无标签）
+- 再选择该环境下的具体应用
 - 选择操作：prepare、update、test、debug等
 - 可以随时切换应用或重新同步
 
@@ -148,8 +149,8 @@ npm run debug
 
 ### 3. 多应用管理
 1. 运行 `npm start` 选择 "🔄 同步所有应用"
-2. 在应用列表中选择要操作的应用
-3. 选择 "切换应用" 在不同应用间切换
+2. 先选择应用环境，再选择该环境下的具体应用
+3. 选择 "切换应用" 在不同应用间切换（同样按环境分组）
 
 ## 📝 文件说明
 
@@ -167,6 +168,7 @@ npm run debug
 ## 🎉 特性优势
 
 - **多应用管理**：支持同时管理多个 Dify 应用
+- **环境分组**：按 TEST/PRODUCTION 标签分组管理应用
 - **智能同步**：一键同步所有应用配置和 API Key
 - **Markdown 编辑**：prompt 文件使用 .md 格式，便于编辑
 - **独立配置**：每个应用有独立的配置和测试环境
@@ -178,6 +180,31 @@ npm run debug
 - `apps/` 目录下的应用数据不会提交到 Git
 - 每个应用有独立的 API Key 配置
 - 支持多环境配置管理
+- **生产环境保护**：带有 `PRODUCTION` 标签的应用禁止 update 操作，防止误操作
+
+## 🛡️ 生产环境保护
+
+系统对带有 `PRODUCTION` 标签的应用实施特殊保护：
+
+### 标签识别
+- **TEST 标签** 🟢: 允许所有操作
+- **PRODUCTION 标签** 🔴: 禁止 update 操作
+
+### 保护机制
+1. **用户界面保护**: 应用选择时显示标签，update 操作时检查
+2. **命令行保护**: 直接执行 update 命令时检查
+3. **双重验证**: 确保生产环境安全
+
+### 使用示例
+```
+🎯 当前应用: MyApp (workflow)
+🔴 应用标签: PRODUCTION
+📁 路径: /path/to/apps/MyApp-PRODUCTION-12345678
+
+❌ 安全限制：检测到PRODUCTION标签的应用，不允许执行update操作！
+```
+
+详细说明请参考 [生产环境保护机制](docs/production-protection.md)
 
 ## 📄 License
 

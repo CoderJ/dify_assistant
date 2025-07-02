@@ -69,6 +69,14 @@ async function selectApplication(skipCache = false) {
   fs.writeFileSync(lastProjectFile, currentAppPath, 'utf-8');
   const appInfo = appManager.getAppInfo(currentAppPath);
   console.log(`\n🎯 当前应用: ${appInfo.displayName} (${appInfo.mode})`);
+  
+  // 显示应用标签信息
+  const appTag = appManager.getAppTag(currentAppPath);
+  if (appTag) {
+    const tagIcon = appTag === 'PRODUCTION' ? '🔴' : '🟢';
+    console.log(`${tagIcon} 应用标签: ${appTag}`);
+  }
+  
   console.log(`📁 路径: ${currentAppPath}\n`);
   return currentAppPath;
 }
@@ -135,6 +143,18 @@ async function main() {
       currentAppPath = await selectApplication(true); // 跳过缓存，直接显示选择列表
       dslMode = getDSLMode(currentAppPath);
       continue;
+    }
+
+    // 检查PRODUCTION标签应用的update操作限制
+    if (action === 'update') {
+      if (appManager.isProductionApp(currentAppPath)) {
+        const appName = path.basename(currentAppPath);
+        console.error('❌ 安全限制：检测到PRODUCTION标签的应用，不允许执行update操作！');
+        console.error('📝 应用名称:', appName);
+        console.error('🔒 为了保护生产环境，PRODUCTION标签的应用禁止update操作');
+        console.error('💡 如需更新，请先将应用标签改为TEST，或联系管理员');
+        continue;
+      }
     }
 
     let cmd = '';
