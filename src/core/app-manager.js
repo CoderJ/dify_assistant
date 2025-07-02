@@ -4,11 +4,12 @@ const path = require('path');
 const yaml = require('js-yaml');
 const inquirer = require('inquirer');
 const axios = require('axios');
-const { getDifyTokensFromChrome } = require('../utils/sync-chrome-tokens');
+const TokenManager = require('../utils/token-manager');
 
 class AppManager {
   constructor() {
     this.appsDir = path.join(process.cwd(), 'apps');
+    this.tokenManager = new TokenManager();
     this.ensureAppsDir();
   }
 
@@ -57,22 +58,46 @@ class AppManager {
 
   // 获取Dify token
   async getToken() {
-    const TOKEN_CACHE_FILE = path.join(process.cwd(), '.token_cache.json');
-    let tokenCache = null;
+    return await this.tokenManager.getToken();
+  }
+
+  // 获取所有已同步的应用ID
+  getSyncedAppIds() {
+    const syncedIds = new Set();
+    if (!fs.existsSync(this.appsDir)) {
+      return syncedIds;
+    }
     
-    if (tokenCache) return tokenCache;
-    if (fs.existsSync(TOKEN_CACHE_FILE)) {
-      try {
-        tokenCache = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf-8'));
-        if (tokenCache && tokenCache.API_TOKEN) return tokenCache;
-      } catch (e) {}
+    const appFolders = fs.readdirSync(this.appsDir);
+    for (const folder of appFolders) {
+      const folderPath = path.join(this.appsDir, folder);
+      if (fs.statSync(folderPath).isDirectory()) {
+        // 从文件夹名中提取app id（格式：name-tag-id）
+        const parts = folder.split('-');
+        if (parts.length >= 2) {
+          const appId = parts[parts.length - 1]; // 最后一部分是app id
+          syncedIds.add(appId);
+        }
+      }
     }
-    tokenCache = await getDifyTokensFromChrome();
-    if (tokenCache && tokenCache.API_TOKEN) {
-      fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(tokenCache));
-      return tokenCache;
+    return syncedIds;
+  }
+
+  // 获取所有tag
+  async getAllTags(DIFY_BASE_URL) {
+    try {
+      const tagsResponse = await this.tokenManager.requestWithTokenRetry({
+        method: 'get',
+        url: `${DIFY_BASE_URL}/console/api/tags?type=app`,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      return tagsResponse.data || [];
+    } catch (error) {
+      console.log(`⚠️  获取tag列表失败: ${error.response?.data?.message || error.message}`);
+      return [];
     }
-    return null;
   }
 
   // 同步所有应用
@@ -103,29 +128,82 @@ class AppManager {
     }
 
     try {
+      // 获取所有tag
+      console.log('🏷️  获取tag列表...');
+      const tags = await this.getAllTags(DIFY_BASE_URL);
+      
+      // 构建tag选择列表
+      const tagChoices = [];
+      if (tags.length > 0) {
+        tagChoices.push(...tags.map(tag => ({
+          name: `🏷️  ${tag.name} (${tag.binding_count}个应用)`,
+          value: tag.id
+        })));
+      }
+      tagChoices.push({ name: '📝 无tag的应用', value: 'no_tag' });
+      tagChoices.push({ name: '🔄 同步所有应用', value: 'all' });
+
+      // 让用户选择tag
+      const prompt = inquirer.createPromptModule();
+      const { selectedTag } = await prompt([
+        {
+          type: 'list',
+          name: 'selectedTag',
+          message: '请选择要同步的应用tag：',
+          choices: tagChoices
+        }
+      ]);
+
+      // 获取已同步的应用ID
+      const syncedAppIds = this.getSyncedAppIds();
+      console.log(`📋 已同步的应用数量: ${syncedAppIds.size}`);
+
       // 获取所有应用列表
       console.log('📋 获取应用列表...');
-      const appsResponse = await axios.get(
-        `${DIFY_BASE_URL}/console/api/apps?page=1&limit=100&name=&is_created_by_me=false`,
-        {
-          headers: {
-            'Authorization': `Bearer ${tokens.API_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
+      const appsResponse = await this.tokenManager.requestWithTokenRetry({
+        method: 'get',
+        url: `${DIFY_BASE_URL}/console/api/apps?page=1&limit=100&name=&is_created_by_me=false`,
+        headers: {
+          'Content-Type': 'application/json'
         }
-      );
+      });
 
-      const apps = appsResponse.data.data || [];
+      let apps = appsResponse.data.data || [];
       console.log(`✅ 找到 ${apps.length} 个应用`);
 
+      // 根据选择的tag筛选应用
+      if (selectedTag !== 'all') {
+        if (selectedTag === 'no_tag') {
+          apps = apps.filter(app => !app.tags || app.tags.length === 0);
+          console.log(`📝 筛选出 ${apps.length} 个无tag的应用`);
+        } else {
+          apps = apps.filter(app => 
+            app.tags && app.tags.some(tag => tag.id === selectedTag)
+          );
+          const selectedTagName = tags.find(t => t.id === selectedTag)?.name || selectedTag;
+          console.log(`🏷️  筛选出 ${apps.length} 个tag为"${selectedTagName}"的应用`);
+        }
+      }
+
       if (apps.length === 0) {
-        console.log('📝 没有找到任何应用');
+        console.log('📝 没有找到符合条件的应用');
         return;
       }
 
       // 为每个应用创建文件夹并下载DSL
+      let syncedCount = 0;
+      let skippedCount = 0;
+      
       for (const app of apps) {
         console.log(`\n📦 处理应用: ${app.name} (${app.mode})`);
+        
+        // 检查是否已经同步过
+        if (syncedAppIds.has(app.id)) {
+          console.log(`⏭️  应用已同步，跳过: ${app.name} (ID: ${app.id})`);
+          skippedCount++;
+          continue;
+        }
+
         // 取tag
         let tagName = '';
         if (Array.isArray(app.tags) && app.tags.length > 0) {
@@ -138,27 +216,23 @@ class AppManager {
         // 替换非法字符
         folderName = folderName.replace(/[\\/:*?"<>|]/g, '_');
         const appPath = path.join(this.appsDir, folderName);
-        if (fs.existsSync(appPath)) {
-          console.log(`⚠️  应用文件夹已存在，跳过: ${folderName}`);
-          continue;
-        }
+        
         // 创建文件夹结构
         const folders = ['DSL', 'logs', 'prompts', 'test', 'tmp'];
         folders.forEach(folder => {
           fs.mkdirSync(path.join(appPath, folder), { recursive: true });
         });
+        
         // 下载DSL
         try {
           console.log(`⬇️  下载DSL配置...`);
-          const dslResponse = await axios.get(
-            `${DIFY_BASE_URL}/console/api/apps/${app.id}/export?include_secret=false`,
-            {
-              headers: {
-                'Authorization': `Bearer ${tokens.API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
+          const dslResponse = await this.tokenManager.requestWithTokenRetry({
+            method: 'get',
+            url: `${DIFY_BASE_URL}/console/api/apps/${app.id}/export?include_secret=false`,
+            headers: {
+              'Content-Type': 'application/json'
             }
-          );
+          });
           let yamlContent = dslResponse.data;
           if (typeof yamlContent === 'object' && yamlContent.data) {
             yamlContent = yamlContent.data;
@@ -171,15 +245,13 @@ class AppManager {
           let apiKey = '';
           try {
             console.log(`🔑 获取API Key...`);
-            const apiKeyResponse = await axios.get(
-              `${DIFY_BASE_URL}/console/api/apps/${app.id}/api-keys`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${tokens.API_TOKEN}`,
-                  'Content-Type': 'application/json'
-                }
+            const apiKeyResponse = await this.tokenManager.requestWithTokenRetry({
+              method: 'get',
+              url: `${DIFY_BASE_URL}/console/api/apps/${app.id}/api-keys`,
+              headers: {
+                'Content-Type': 'application/json'
               }
-            );
+            });
             
             const apiKeys = apiKeyResponse.data.data || [];
             if (apiKeys.length > 0) {
@@ -209,6 +281,7 @@ class AppManager {
           }
 
           console.log(`✅ 应用创建完成: ${folderName}`);
+          syncedCount++;
         } catch (error) {
           console.error(`❌ 下载应用 ${app.name} 失败:`, error.response?.data?.message || error.message);
           // 清理失败的文件夹
@@ -219,6 +292,10 @@ class AppManager {
       }
 
       console.log('\n🎉 同步完成！');
+      console.log(`📊 统计信息:`);
+      console.log(`  - 新同步应用: ${syncedCount} 个`);
+      console.log(`  - 跳过已同步: ${skippedCount} 个`);
+      console.log(`  - 总处理应用: ${apps.length} 个`);
       console.log('📝 请检查apps目录下的应用，并手动填写每个应用的TEST_API_KEY');
       console.log('💡 运行 npm start 可以查看和管理所有应用');
 

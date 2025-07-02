@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const axios = require('axios');
-const { getDifyTokensFromChrome } = require('../utils/sync-chrome-tokens');
+const TokenManager = require('../utils/token-manager');
 
 // 解析命令行参数
 const args = process.argv.slice(2);
@@ -26,8 +26,7 @@ const configFile = configArgIdx !== -1 ? args[configArgIdx + 1] : 'config.json';
 const appPath = process.env.APP_PATH || process.cwd();
 const rootConfigPath = path.join(process.cwd(), 'config.json');
 
-const TOKEN_CACHE_FILE = path.join(process.cwd(), '.token_cache.json');
-let tokenCache = null;
+const tokenManager = new TokenManager();
 
 // 确保缓存文件始终在项目根目录
 function findProjectRoot() {
@@ -113,44 +112,11 @@ const api_key = TEST_API_KEY;
 const api_base_url = DIFY_BASE_URL; // 这里应该是DIFY_BASE_URL，不是TEST_BASE_URL
 
 async function getToken() {
-  if (tokenCache) return tokenCache;
-  if (fs.existsSync(TOKEN_CACHE_FILE)) {
-    try {
-      tokenCache = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf-8'));
-      if (tokenCache && tokenCache.API_TOKEN) return tokenCache;
-    } catch (e) {}
-  }
-  tokenCache = await getDifyTokensFromChrome();
-  if (tokenCache && tokenCache.API_TOKEN) {
-    fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(tokenCache));
-    return tokenCache;
-  }
-  return null;
+  return await tokenManager.getToken();
 }
 
 async function requestWithTokenRetry(axiosConfig) {
-  let tokens = await getToken();
-  if (!tokens || !tokens.API_TOKEN) {
-    console.error('未能获取到有效的 Dify token，请确保已登录 cloud.dify.ai 并在 config.json 配置了正确的 CHROME_LEVELDB_PATH！');
-    process.exit(1);
-  }
-  axiosConfig.headers = axiosConfig.headers || {};
-  axiosConfig.headers['Authorization'] = `Bearer ${tokens.API_TOKEN}`;
-  try {
-    return await axios(axiosConfig);
-  } catch (err) {
-    if (err.response && err.response.status === 401) {
-      // token 失效，重新 sync
-      const newTokens = await getDifyTokensFromChrome();
-      if (newTokens && newTokens.API_TOKEN) {
-        fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(newTokens));
-        tokenCache = newTokens;
-        axiosConfig.headers['Authorization'] = `Bearer ${newTokens.API_TOKEN}`;
-        return await axios(axiosConfig); // 重试
-      }
-    }
-    throw err;
-  }
+  return await tokenManager.requestWithTokenRetry(axiosConfig);
 }
 
 // 工具函数
