@@ -108,6 +108,7 @@ async function main() {
     // 根据 DSL mode 添加 workflow 测试选项
     if (dslMode === 'workflow') {
       choices.push({ name: 'Workflow 测试（test:workflow）', value: 'test:workflow' });
+      choices.push({ name: '从Dify日志提取测试数据', value: 'extract_test_data' });
     } else if (dslMode === 'advanced-chat') {
       choices.push({ name: '网页调试（debug）', value: 'debug' });
       choices.push({ name: 'Chat 测试（test:chat）', value: 'test:chat' });
@@ -190,6 +191,46 @@ async function main() {
       } else {
         cmd = `npm run test:workflow -- --inputs ${set}`;
       }
+    }
+
+    if (action === 'extract_test_data') {
+      try {
+        const DifyTestDataExtractor = require('../utils/extract-test-data');
+        
+        const { maxTests, days } = await prompt([
+          {
+            type: 'input',
+            name: 'maxTests',
+            message: '要提取多少个测试用例？',
+            default: '5',
+            validate: (value) => {
+              const num = parseInt(value);
+              return num > 0 && num <= 20 ? true : '请输入1-20之间的数字';
+            }
+          },
+          {
+            type: 'input',
+            name: 'days',
+            message: '要获取最近几天的日志？',
+            default: '7',
+            validate: (value) => {
+              const num = parseInt(value);
+              return num > 0 && num <= 30 ? true : '请输入1-30之间的数字';
+            }
+          }
+        ]);
+
+        const extractor = new DifyTestDataExtractor(currentAppPath);
+        await extractor.extractTestData(parseInt(maxTests), parseInt(days));
+        
+        console.log('\n✅ 测试数据提取完成！');
+        console.log('📝 已自动过滤掉metadata.json和sys.开头的参数');
+        console.log('现在可以使用 "Workflow 测试" 来测试新提取的数据。');
+        
+      } catch (error) {
+        console.error('❌ 提取测试数据失败:', error.message);
+      }
+      continue;
     }
 
     if (cmd) {
