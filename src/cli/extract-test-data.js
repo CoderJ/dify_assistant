@@ -13,6 +13,7 @@ async function main() {
     let appPath = null;
     let maxTests = 5;
     let days = 7;
+    let keyword = '';
 
     // 解析参数
     for (let i = 0; i < args.length; i++) {
@@ -25,6 +26,9 @@ async function main() {
                 break;
             case '--days':
                 days = parseInt(args[++i]);
+                break;
+            case '--keyword':
+                keyword = args[++i];
                 break;
             case '--help':
             case '-h':
@@ -110,21 +114,31 @@ async function main() {
                     const num = parseInt(value);
                     return num > 0 && num <= 30 ? true : '请输入1-30之间的数字';
                 }
+            },
+            {
+                type: 'input',
+                name: 'keyword',
+                message: '搜索关键词（可选，留空则不搜索）',
+                default: ''
             }
         ]);
 
         maxTests = parseInt(answers.maxTests);
         days = parseInt(answers.days);
+        keyword = answers.keyword;
     }
 
     console.log(`\n📁 应用路径: ${appPath}`);
     console.log(`📊 提取数量: ${maxTests} 个测试用例`);
     console.log(`📅 时间范围: 最近 ${days} 天`);
+    if (keyword && keyword.trim()) {
+        console.log(`🔍 搜索关键词: "${keyword.trim()}"`);
+    }
     console.log('');
 
     try {
         const extractor = new DifyTestDataExtractor(appPath);
-        await extractor.extractTestData(maxTests, days);
+        await extractor.extractTestData(maxTests, days, keyword);
         
         console.log('\n✅ 测试数据提取完成！');
         console.log('📝 已自动过滤掉metadata.json和sys.开头的参数');
@@ -149,6 +163,7 @@ function showHelp() {
   --app-path <path>     指定应用路径
   --max-tests <number>  要提取的测试用例数量 (默认: 5)
   --days <number>       要获取最近几天的日志 (默认: 7)
+  --keyword <string>    搜索关键词 (可选)
   --help, -h           显示帮助信息
 
 示例:
@@ -161,11 +176,15 @@ function showHelp() {
   # 指定参数
   node src/cli/extract-test-data.js --max-tests 10 --days 3
 
+  # 搜索特定关键词
+  node src/cli/extract-test-data.js --keyword "错误" --max-tests 5
+
 注意:
   - 需要先运行 npm start 同步应用
   - 需要先运行 npm run prepare 初始化应用
   - 需要已登录 cloud.dify.ai 并配置了 Chrome LevelDB 路径
   - 自动过滤掉metadata.json和sys.开头的参数
+  - 关键词搜索可以帮助找到特定的测试场景
 `);
 }
 

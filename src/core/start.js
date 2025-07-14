@@ -217,7 +217,7 @@ async function main() {
       try {
         const DifyTestDataExtractor = require('../utils/extract-test-data');
         
-        const { maxTests, days } = await prompt([
+        const { maxTests, days, keyword } = await prompt([
           {
             type: 'input',
             name: 'maxTests',
@@ -237,11 +237,17 @@ async function main() {
               const num = parseInt(value);
               return num > 0 && num <= 30 ? true : '请输入1-30之间的数字';
             }
+          },
+          {
+            type: 'input',
+            name: 'keyword',
+            message: '搜索关键词（可选，留空则不搜索）',
+            default: ''
           }
         ]);
 
         const extractor = new DifyTestDataExtractor(currentAppPath);
-        await extractor.extractTestData(parseInt(maxTests), parseInt(days));
+        await extractor.extractTestData(parseInt(maxTests), parseInt(days), keyword);
         
         console.log('\n✅ 测试数据提取完成！');
         console.log('📝 已自动过滤掉metadata.json和sys.开头的参数');

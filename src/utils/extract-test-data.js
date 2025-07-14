@@ -96,7 +96,7 @@ class DifyTestDataExtractor {
     }
 
     // 获取工作流日志列表
-    async getWorkflowLogs(days = 7, limit = 10) {
+    async getWorkflowLogs(days = 7, limit = 10, keyword = '') {
         const appId = this.appConfig.APP_ID;
         const baseUrl = this.globalConfig.DIFY_BASE_URL;
         
@@ -110,6 +110,11 @@ class DifyTestDataExtractor {
             created_at__after: startDate.toISOString(),
             created_at__before: endDate.toISOString()
         });
+
+        // 如果提供了keyword，添加到查询参数中
+        if (keyword && keyword.trim()) {
+            params.append('keyword', keyword.trim());
+        }
 
         const url = `${baseUrl}/console/api/apps/${appId}/workflow-app-logs?${params}`;
         const response = await this.makeRequest(url);
@@ -189,7 +194,21 @@ class DifyTestDataExtractor {
             
             if (value !== null && value !== undefined) {
                 const filePath = path.join(testDir, `${key}.txt`);
-                fs.writeFileSync(filePath, String(value), 'utf-8');
+                
+                // 特殊处理文件类型数据
+                if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0].dify_model_identity === '__dify__file__') {
+                    // 这是文件数组，需要转换为API要求的格式
+                    const apiFiles = value.map(file => ({
+                        type: file.type || 'custom',
+                        transfer_method: file.transfer_method || 'remote_url',
+                        url: file.url || file.remote_url,
+                        upload_file_id: file.upload_file_id
+                    }));
+                    fs.writeFileSync(filePath, JSON.stringify(apiFiles, null, 2), 'utf-8');
+                } else {
+                    // 其他类型，保存为字符串
+                    fs.writeFileSync(filePath, String(value), 'utf-8');
+                }
             }
         }
 
@@ -209,7 +228,21 @@ class DifyTestDataExtractor {
                 if (value !== null && value !== undefined) {
                     const testIndex = path.basename(testDir);
                     const filePath = path.join(outputsDir, `${testIndex}_${key}.txt`);
-                    fs.writeFileSync(filePath, String(value), 'utf-8');
+                    
+                    // 特殊处理文件类型数据
+                    if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0].dify_model_identity === '__dify__file__') {
+                        // 这是文件数组，需要转换为API要求的格式
+                        const apiFiles = value.map(file => ({
+                            type: file.type || 'custom',
+                            transfer_method: file.transfer_method || 'remote_url',
+                            url: file.url || file.remote_url,
+                            upload_file_id: file.upload_file_id
+                        }));
+                        fs.writeFileSync(filePath, JSON.stringify(apiFiles, null, 2), 'utf-8');
+                    } else {
+                        // 其他类型，保存为字符串
+                        fs.writeFileSync(filePath, String(value), 'utf-8');
+                    }
                 }
             }
         }
@@ -219,13 +252,17 @@ class DifyTestDataExtractor {
     }
 
     // 主提取方法
-    async extractTestData(maxTests = 5, days = 7) {
+    async extractTestData(maxTests = 5, days = 7, keyword = '') {
         console.log('🔍 开始从Dify日志中提取测试数据...');
+        
+        if (keyword && keyword.trim()) {
+            console.log(`🔍 搜索关键词: "${keyword.trim()}"`);
+        }
         
         try {
             // 1. 获取日志列表
             console.log('📋 获取工作流日志列表...');
-            const logsResponse = await this.getWorkflowLogs(days, maxTests * 2); // 获取更多日志，因为可能有些失败
+            const logsResponse = await this.getWorkflowLogs(days, maxTests * 2, keyword); // 获取更多日志，因为可能有些失败
             const logs = logsResponse.data || [];
             
             if (logs.length === 0) {

@@ -61,7 +61,33 @@ function readInputsFromDir(dir) {
   for (const file of fs.readdirSync(dir)) {
     if (file.endsWith('.txt')) {
       const varName = file.replace(/\.txt$/, '');
-      inputs[varName] = fs.readFileSync(path.join(dir, file), 'utf-8');
+      const content = fs.readFileSync(path.join(dir, file), 'utf-8');
+      
+      // 只对文件类型的数据进行特殊处理
+      if (varName === 'files' || varName.endsWith('_files')) {
+        try {
+          // 检查是否是JSON格式的文件数组
+          if (content.trim().startsWith('[')) {
+            const parsed = JSON.parse(content);
+            // 验证是否是API格式的文件数组
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type && parsed[0].transfer_method) {
+              inputs[varName] = parsed;
+            } else {
+              // 不是API格式，当作普通字符串
+              inputs[varName] = content;
+            }
+          } else {
+            // 不是JSON格式，当作普通字符串
+            inputs[varName] = content;
+          }
+        } catch (e) {
+          // 解析失败，当作普通字符串处理
+          inputs[varName] = content;
+        }
+      } else {
+        // 非文件类型的数据，直接作为字符串处理
+        inputs[varName] = content;
+      }
     }
   }
   return inputs;
