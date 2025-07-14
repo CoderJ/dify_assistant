@@ -19,6 +19,7 @@ tmp/
 config.json
 *.token_cache.json
 .last_project
+test.json
 
 # 忽略apps目录下的所有内容（用户的应用数据）
 apps/*
